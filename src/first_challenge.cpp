@@ -34,10 +34,11 @@ FirstChallenge::FirstChallenge() : Node("first_challenge")
 
 void FirstChallenge::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
-  if(msg != NULL)
-  {
-    can_move_ = true;
-  }
+  // if(*msg != NULL)
+  // {
+  //   can_move_ = true;
+  // }
+  can_move_ = true;
   pub_cmd_vel(can_move_);
 }
 
