@@ -14,14 +14,25 @@ public:
   int hz_ = 10;
 
 private:
-  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
-  void pub_cmd_vel(bool can_move);
 
+  //関数
+  void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg);
+  void can_move(std::optional<nav_msgs::msg::Odometry> odom_);
+  void is_goal(std::optional<nav_msgs::msg::Odometry> odom_);
+  void set_cmd_vel();
+  double calc_dist();
+  void run(double velocity, double omega);
+
+  //pub sub 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_; 
   rclcpp::Publisher<roomba_500driver_meiji::msg::RoombaCtrl>::SharedPtr cmd_vel_pub_;
 
-  bool can_move_ = false;
+  //変数
+  std::optional<nav_msgs::msg::Odometry> odom_;
   roomba_500driver_meiji::msg::RoombaCtrl cmd_vel_;
+  double goal_dist = 1.0;
+  double velocity = 0.0;
+  double omega = 0.0;
 
 };
 
@@ -35,48 +46,56 @@ FirstChallenge::FirstChallenge() : Node("first_challenge")
 
 void FirstChallenge::odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg)
 {
-
-  RCLCPP_INFO(this->get_logger(),"odom_callback");
-  if(msg != NULL)
-  {
-    RCLCPP_INFO(this->get_logger(),"sub odom");
-    can_move_ = true;
-  }
-  else{
-    RCLCPP_INFO(this->get_logger(),"none sub odom");
-  }
-
-  pub_cmd_vel(can_move_);
+  odom_ = *msg;
+  can_move(odom_);
 }
 
-
-void FirstChallenge::pub_cmd_vel(bool can_move)
+void FirstChallenge::can_move(std::optional<nav_msgs::msg::Odometry> odom_)
 {
-  RCLCPP_INFO(this->get_logger(),"determine_cmd_vel");
-  if(can_move_)
+  if(odom_.has_value())
   {
-    RCLCPP_INFO(this->get_logger(),"pub_cmd_vel");
-
-    cmd_vel_.mode = 11;
-    cmd_vel_.cntl.linear.x = 0.1;
-    cmd_vel_.cntl.angular.z = 0;
-
-    cmd_vel_pub_->publish(cmd_vel_);
+    set_cmd_vel();
   }
+}
+
+void FirstChallenge::set_cmd_vel()
+{
+  if(calc_dist() >= goal_dist)
+  {
+    velocity = 0.0;
+    omega = 0.0;
+    run(velocity,omega);
+  }
+  else
+  {
+    velocity = 0.1;
+    omega = 0.0;
+    run(velocity,omega);
+  }
+}
+
+double FirstChallenge::calc_dist()
+{
+  return hypot(odom_.value().pose.pose.position.x , odom_.value().pose.pose.position.y);
+}
+
+void FirstChallenge::run(double velocity, double omega)
+{
+  RCLCPP_INFO(this->get_logger(),"run");
+
+  cmd_vel_.mode = 11;
+  cmd_vel_.cntl.linear.x = velocity;
+  cmd_vel_.cntl.angular.z = omega;
+
+  cmd_vel_pub_->publish(cmd_vel_);
+
 }
 
 int main(int argc, char *argv[])
 {
   rclcpp::init(argc, argv);
-
   std::shared_ptr<FirstChallenge> fchallenge = std::make_shared<FirstChallenge>();
-  rclcpp::Rate loop_rate(fchallenge->hz_);
-
-  while(rclcpp::ok())
-  {
-    rclcpp::spin_some(fchallenge);
-    loop_rate.sleep();
-  }
+  rclcpp::spin(fchallenge);
   rclcpp::shutdown();
 
   return 0;
